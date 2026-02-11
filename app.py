@@ -16,18 +16,26 @@ def ask_groq(question):
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
+    # Usiamo il modello più stabile di Groq
     data = {
-        "model": "llama3-8b-8192",
+        "model": "llama-3.3-70b-versatile", 
         "messages": [
-            {"role": "system", "content": "Sei il Sensor del Consiglio IA. Fornisci analisi brevi e tecniche."},
+            {"role": "system", "content": "Sei il Sensor del Consiglio IA. Fornisci analisi brevi."},
             {"role": "user", "content": question}
         ]
     }
     try:
         response = requests.post(url, headers=headers, json=data)
-        return response.json()['choices'][0]['message']['content']
+        res_json = response.json()
+        
+        if 'choices' in res_json:
+            return res_json['choices'][0]['message']['content']
+        else:
+            # Questo ci dirà il vero errore di Groq (es. API key invalida)
+            error_info = res_json.get('error', {}).get('message', 'Errore sconosciuto')
+            return f"Dettaglio Errore Groq: {error_info}"
     except Exception as e:
-        return f"Errore Groq: {str(e)}"
+        return f"Errore Connessione: {str(e)}"
 
 @app.route('/webhook/sensor', methods=['POST'])
 def webhook():
@@ -42,7 +50,7 @@ def webhook():
 def handle_message(message):
     bot.send_chat_action(message.chat.id, 'typing')
     risposta = ask_groq(message.text)
-    bot.reply_to(message, f"📡 [SENSOR DATA - Llama3]:\n\n{risposta}")
+    bot.reply_to(message, f"📡 [SENSOR DATA]:\n\n{risposta}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
