@@ -12,7 +12,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
+# Sostituisci la riga del bot con questa per un debug migliore
+TOKEN_SENSOR = os.getenv("TOKEN_SENSOR")
+if not TOKEN_SENSOR:
+    print("ERRORE: Variabile TOKEN_SENSOR non trovata!")
 bot = telebot.TeleBot(TOKEN_SENSOR)
+
 app = Flask(__name__)
 
 SYSTEM_PROMPT = "Agisci come SENSOR. Estrai dati, identifica pattern e descrivi oggettivamente ciò che vedi, sia in testo che in immagini."
