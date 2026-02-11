@@ -3,21 +3,41 @@ import telebot
 import google.generativeai as genai
 from flask import Flask, request
 
-# 1. RECUPERO VARIABILI D'AMBIENTE
-# Assicurati che su Railway siano scritte esattamente così
+# 1. CONFIGURAZIONE VARIABILI
 TOKEN = os.getenv("TOKEN_SENSOR")
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-# 2. CONFIGURAZIONE GOOGLE AI
 genai.configure(api_key=API_KEY)
-# Utilizziamo 'gemini-pro' per evitare l'errore 404 del modello flash
-model = genai.GenerativeModel('gemini-pro')
 
-# 3. INIZIALIZZAZIONE BOT E SERVER
+# 2. INIZIALIZZAZIONE
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# 4. ROTTA PER IL WEBHOOK
+# 3. LOGICA DI GENERAZIONE (Con prova modelli multipli)
+def generate_response(user_text):
+    # Lista dei nomi modelli dal più recente al più stabile
+    model_names = [
+        'gemini-1.5-flash-latest', 
+        'gemini-1.5-flash', 
+        'gemini-pro', 
+        'gemini-1.0-pro'
+    ]
+    
+    for name in model_names:
+        try:
+            print(f"Tentativo con modello: {name}")
+            model = genai.GenerativeModel(name)
+            response = model.generate_content(
+                f"Agisci come il 'Sensor' del Consiglio IA. Analizza: {user_text}"
+            )
+            return response.text
+        except Exception as e:
+            print(f"Modello {name} fallito: {e}")
+            continue # Passa al prossimo modello nella lista
+            
+    return "❌ Nessun modello Gemini disponibile. Controlla i permessi della API Key."
+
+# 4. ROTTA WEBHOOK
 @app.route('/webhook/sensor', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -25,32 +45,18 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'OK', 200
-    else:
-        return 'Error', 403
+    return 'Error', 403
 
-# 5. GESTIONE MESSAGGI
+# 5. GESTORE MESSAGGI TELEGRAM
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    try:
-        # Log di controllo nei Deploy Logs di Railway
-        print(f"📡 Sensor riceve: {message.text}")
-        
-        # Generazione della risposta con l'IA
-        response = model.generate_content(
-            f"Agisci come il 'Sensor' del Consiglio IA. Analizza brevemente questo input: {message.text}"
-        )
-        
-        # Invio risposta al bot
-        bot.reply_to(message, f"📡 [SENSOR DATA]:\n\n{response.text}")
-        
-    except Exception as e:
-        # Se c'è un errore, lo scrive sia nei log che a te su Telegram
-        error_details = f"❌ Errore Sensor: {str(e)}"
-        print(error_details)
-        bot.reply_to(message, error_details)
+    print(f"📡 Messaggio ricevuto: {message.text}")
+    bot.send_chat_action(message.chat.id, 'typing')
+    
+    testo_risposta = generate_response(message.text)
+    bot.reply_to(message, f"📡 [SENSOR DATA]:\n\n{testo_risposta}")
 
-# 6. AVVIO SERVER
+# 6. AVVIO
 if __name__ == "__main__":
-    # Railway assegna automaticamente una porta, noi la leggiamo
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
